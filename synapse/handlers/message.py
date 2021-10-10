@@ -889,22 +889,27 @@ class EventCreationHandler:
                 requester=requester,
                 event=event,
                 context=context,
-                ratelimit=ratelimit,
+                ratelimit=False,
                 ignore_shadow_ban=ignore_shadow_ban,
             )
 
         # If the event requests to clear the history push and notify
         # all redact events of the messages
-        if event.type == EventTypes.Redaction and event.redacts == RedactionTypes.ALL_USER_MESSAGES:
-            message_filter = Filter(dict([
-                ("types", [EventTypes.Message, EventTypes.Encrypted]),
-                ("senders", [event.sender])
-            ]))
+        if (event.type == EventTypes.Redaction
+            and event.redacts
+                in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
+
+            message_filter_dict = dict([
+                ("types", [EventTypes.Message, EventTypes.Encrypted])
+            ])
+            if event.redacts == RedactionTypes.ALL_USER_MESSAGES:
+                message_filter_dict["senders"] = [event.sender]
+
             events, token = await self.store.paginate_room_events(
                 event.room_id,
                 self.hs.get_event_sources().get_current_token_for_pagination().room_key,
-                limit=2 ** 62 - 1, # FUCKING todo
-                event_filter=message_filter
+                limit=2 ** 62 - 1,  # FUCKING todo
+                event_filter=Filter(message_filter_dict)
             )
 
             event_ids = [x.event_id for x in events]
@@ -1425,9 +1430,8 @@ class EventCreationHandler:
                     self.room_prejoin_state_types,
                 )
 
-        if event.type == EventTypes.Redaction and event.redacts != "allMessages":
-            logger.info("persist")
-            logger.info(event.redacts)
+        if (event.type == EventTypes.Redaction and event.redacts
+                in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
             original_event = await self.store.get_event(
                 event.redacts,
                 redact_behaviour=EventRedactBehaviour.AS_IS,
