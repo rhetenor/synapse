@@ -835,8 +835,6 @@ class EventCreationHandler:
             ShadowBanError if the requester has been shadow-banned.
         """
 
-        logger.info("sup")
-        logger.info(event_dict)
         if event_dict["type"] == EventTypes.Member:
             raise SynapseError(
                 500, "Tried to send member event through non-member codepath"
@@ -897,7 +895,6 @@ class EventCreationHandler:
         # If the event requests to clear the history push and notify
         # all redact events of the messages
         if event.type == EventTypes.Redaction and event.redacts == "allMessages":
-            logger.info("heeeey")
             message_filter = Filter(dict([
                 ("types", [EventTypes.Message, EventTypes.Encrypted]),
                 ("senders", [event.sender])
@@ -910,7 +907,6 @@ class EventCreationHandler:
             )
 
             event_ids = [x.event_id for x in events]
-            logger.info(event_ids)
             workers = list()
             for event_id in event_ids:
                 redact_event_dict = event_dict.copy()
@@ -931,7 +927,6 @@ class EventCreationHandler:
                     historical,
                     depth
                 ))
-            logger.info(workers)
             await defer.gatherResults(workers)
 
         # we know it was persisted, so must have a stream ordering
