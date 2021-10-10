@@ -34,6 +34,7 @@ from synapse.api.constants import (
     RelationTypes,
     UserTypes,
     RedactionTypes,
+    MAX_SQL_BIGINT
 )
 from synapse.api.errors import (
     AuthError,
@@ -908,7 +909,7 @@ class EventCreationHandler:
             events, token = await self.store.paginate_room_events(
                 event.room_id,
                 self.hs.get_event_sources().get_current_token_for_pagination().room_key,
-                limit=2 ** 62 - 1,  # FUCKING todo
+                limit=MAX_SQL_BIGINT,
                 event_filter=Filter(message_filter_dict)
             )
 

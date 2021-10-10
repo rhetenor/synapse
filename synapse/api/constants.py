@@ -23,6 +23,9 @@ MAX_PDU_SIZE = 65536
 # the "depth" field on events is limited to 2**63 - 1
 MAX_DEPTH = 2 ** 63 - 1
 
+# the max size of a SQL big int
+MAX_SQL_BIGINT = 2 ** 62 - 1
+
 # the maximum length for a room alias is 255 characters
 MAX_ALIAS_LENGTH = 255
 
