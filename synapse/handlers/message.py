@@ -14,11 +14,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
 
 import logging
 import random
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple
+from uuid import uuid1
 
 from canonicaljson import encode_canonical_json
 
@@ -33,6 +33,7 @@ from synapse.api.constants import (
     Membership,
     RelationTypes,
     UserTypes,
+    RedactionTypes,
 )
 from synapse.api.errors import (
     AuthError,
@@ -894,7 +895,7 @@ class EventCreationHandler:
 
         # If the event requests to clear the history push and notify
         # all redact events of the messages
-        if event.type == EventTypes.Redaction and event.redacts == "allMessages":
+        if event.type == EventTypes.Redaction and event.redacts == RedactionTypes.ALL_USER_MESSAGES:
             message_filter = Filter(dict([
                 ("types", [EventTypes.Message, EventTypes.Encrypted]),
                 ("senders", [event.sender])
@@ -912,7 +913,7 @@ class EventCreationHandler:
                 redact_event_dict = event_dict.copy()
                 redact_event_dict["redacts"] = event_id
 
-                txn_id = "m" + str(random.randint(1000000000000, 9999999999999)) + ".38"
+                new_txn_id = str(uuid1())
 
                 workers.append(run_in_background(
                     self.create_and_send_nonmember_event,
@@ -921,7 +922,7 @@ class EventCreationHandler:
                     prev_event_ids,
                     auth_event_ids,
                     ratelimit,
-                    txn_id,
+                    new_txn_id,
                     ignore_shadow_ban,
                     outlier,
                     historical,

@@ -224,6 +224,13 @@ class RoomTypes:
     SPACE = "m.space"
 
 
+class RedactionTypes:
+    """Understood special values of the redacts field of m.room.redaction events."""
+
+    ALL_USER_MESSAGES = "m.messages.user"
+    ALL_ROOM_MESSAGES = "m.messages.all"
+
+
 class RoomEncryptionAlgorithms:
     MEGOLM_V1_AES_SHA2 = "m.megolm.v1.aes-sha2"
     DEFAULT = MEGOLM_V1_AES_SHA2
