@@ -14,6 +14,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
+
 import logging
 import random
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple
@@ -850,8 +852,6 @@ class EventCreationHandler:
         # a situation where event persistence can't keep up, causing
         # extremities to pile up, which in turn leads to state resolution
         # taking longer.
-        logger.info(txn_id)
-        logger.info(requester.access_token_id)
         with (await self.limiter.queue(event_dict["room_id"])):
             if txn_id and requester.access_token_id:
                 existing_event_id = await self.store.get_event_id_from_transaction_id(
@@ -865,7 +865,6 @@ class EventCreationHandler:
                     # we know it was persisted, so must have a stream ordering
                     assert event.internal_metadata.stream_ordering
                     return event, event.internal_metadata.stream_ordering
-            logger.info("i'm heeere")
             event, context = await self.create_event(
                 requester,
                 event_dict,
@@ -897,39 +896,32 @@ class EventCreationHandler:
 
         # If the event requests to clear the history push and notify
         # all redact events of the messages
-        logger.info(event.type)
-        if event.type == EventTypes.Redaction and event.redacts == "allMessagesBefore":
+        if event.type == EventTypes.Redaction and event.redacts == "allMessages":
             logger.info("heeeey")
             message_filter = Filter(dict([
-                ("types", [EventTypes.Message]),
+                ("types", [EventTypes.Message, EventTypes.Encrypted]),
                 ("senders", [event.sender])
             ]))
             events, token = await self.store.paginate_room_events(
                 event.room_id,
-                self.hs.get_event_sources().get_current_token_for_pagination(),
+                self.hs.get_event_sources().get_current_token_for_pagination().room_key,
+                limit=2 ** 62 - 1, # FUCKING todo
                 event_filter=message_filter
             )
 
-            event_ids = [x.id for x in events]
+            event_ids = [x.event_id for x in events]
+            logger.info(event_ids)
             workers = list()
             for event_id in event_ids:
-                redact_events_dict = event_dict.copy()
-                redact_events_dict["redacts"] = event_id
+                redact_event_dict = event_dict.copy()
+                redact_event_dict["redacts"] = event_id
 
-                event, context = await self.create_event(
-                    requester,
-                    event_dict,
-                    txn_id=txn_id,
-                    prev_event_ids=prev_event_ids,
-                    auth_event_ids=auth_event_ids,
-                    outlier=outlier,
-                    historical=historical,
-                    depth=depth,
-                )
+                txn_id = "m" + str(random.randint(1000000000000, 9999999999999)) + ".38"
+
                 workers.append(run_in_background(
                     self.create_and_send_nonmember_event,
                     requester,
-                    event,
+                    redact_event_dict,
                     prev_event_ids,
                     auth_event_ids,
                     ratelimit,
@@ -939,6 +931,7 @@ class EventCreationHandler:
                     historical,
                     depth
                 ))
+            logger.info(workers)
             await defer.gatherResults(workers)
 
         # we know it was persisted, so must have a stream ordering
@@ -1436,7 +1429,7 @@ class EventCreationHandler:
                     self.room_prejoin_state_types,
                 )
 
-        if event.type == EventTypes.Redaction:
+        if event.type == EventTypes.Redaction and event.redacts != "allMessages":
             logger.info("persist")
             logger.info(event.redacts)
             original_event = await self.store.get_event(

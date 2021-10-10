@@ -340,7 +340,15 @@ class EventsWorkerStore(SQLBaseStore):
         )
 
         return {e.event_id: e for e in events}
+    async def get_events_by_filter(
+        self,
+        event_filter,
+        redact_behaviour: EventRedactBehaviour = EventRedactBehaviour.REDACT,
+        get_prev_content: bool = False,
+        allow_rejected: bool = False,
+    ) -> List[EventBase]:
 
+        pass
     async def get_events_as_list(
         self,
         event_ids: Collection[str],
