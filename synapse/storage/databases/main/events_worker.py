@@ -286,14 +286,14 @@ class EventsWorkerStore(SQLBaseStore):
         """
         if not isinstance(event_id, str):
             raise TypeError("Invalid event event_id %r" % (event_id,))
-
+        logger.info(event_id)
         events = await self.get_events_as_list(
             [event_id],
             redact_behaviour=redact_behaviour,
             get_prev_content=get_prev_content,
             allow_rejected=allow_rejected,
         )
-
+        logger.info(events)
         event = events[0] if events else None
 
         if event is not None and check_room_id is not None:
@@ -301,7 +301,7 @@ class EventsWorkerStore(SQLBaseStore):
                 event = None
 
         if event is None and not allow_none:
-            raise NotFoundError("Could not find event %s" % (event_id,))
+            raise NotFoundError("Could not find event tata %s" % (event_id,))
 
         return event
 

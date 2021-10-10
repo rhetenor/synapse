@@ -287,7 +287,6 @@ class RoomSendEventRestServlet(TransactionRestServlet):
         self, request: SynapseRequest, room_id: str, event_type: str, txn_id: str
     ) -> Awaitable[Tuple[int, JsonDict]]:
         set_tag("txn_id", txn_id)
-
         return self.txns.fetch_or_execute_request(
             request, self.on_POST, request, room_id, event_type, txn_id
         )
@@ -894,7 +893,6 @@ class RoomRedactEventRestServlet(TransactionRestServlet):
         self, request: SynapseRequest, room_id: str, event_id: str, txn_id: str
     ) -> Awaitable[Tuple[int, JsonDict]]:
         set_tag("txn_id", txn_id)
-
         return self.txns.fetch_or_execute_request(
             request, self.on_POST, request, room_id, event_id, txn_id
         )

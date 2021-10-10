@@ -42,6 +42,7 @@ from synapse.api.errors import (
 )
 from synapse.api.room_versions import KNOWN_ROOM_VERSIONS, RoomVersions
 from synapse.api.urls import ConsentURIBuilder
+from synapse.api.filtering import Filter
 from synapse.events import EventBase
 from synapse.events.builder import EventBuilder
 from synapse.events.snapshot import EventContext
@@ -832,6 +833,8 @@ class EventCreationHandler:
             ShadowBanError if the requester has been shadow-banned.
         """
 
+        logger.info("sup")
+        logger.info(event_dict)
         if event_dict["type"] == EventTypes.Member:
             raise SynapseError(
                 500, "Tried to send member event through non-member codepath"
@@ -847,6 +850,8 @@ class EventCreationHandler:
         # a situation where event persistence can't keep up, causing
         # extremities to pile up, which in turn leads to state resolution
         # taking longer.
+        logger.info(txn_id)
+        logger.info(requester.access_token_id)
         with (await self.limiter.queue(event_dict["room_id"])):
             if txn_id and requester.access_token_id:
                 existing_event_id = await self.store.get_event_id_from_transaction_id(
@@ -860,7 +865,7 @@ class EventCreationHandler:
                     # we know it was persisted, so must have a stream ordering
                     assert event.internal_metadata.stream_ordering
                     return event, event.internal_metadata.stream_ordering
-
+            logger.info("i'm heeere")
             event, context = await self.create_event(
                 requester,
                 event_dict,
@@ -889,6 +894,52 @@ class EventCreationHandler:
                 ratelimit=ratelimit,
                 ignore_shadow_ban=ignore_shadow_ban,
             )
+
+        # If the event requests to clear the history push and notify
+        # all redact events of the messages
+        logger.info(event.type)
+        if event.type == EventTypes.Redaction and event.redacts == "allMessagesBefore":
+            logger.info("heeeey")
+            message_filter = Filter(dict([
+                ("types", [EventTypes.Message]),
+                ("senders", [event.sender])
+            ]))
+            events, token = await self.store.paginate_room_events(
+                event.room_id,
+                self.hs.get_event_sources().get_current_token_for_pagination(),
+                event_filter=message_filter
+            )
+
+            event_ids = [x.id for x in events]
+            workers = list()
+            for event_id in event_ids:
+                redact_events_dict = event_dict.copy()
+                redact_events_dict["redacts"] = event_id
+
+                event, context = await self.create_event(
+                    requester,
+                    event_dict,
+                    txn_id=txn_id,
+                    prev_event_ids=prev_event_ids,
+                    auth_event_ids=auth_event_ids,
+                    outlier=outlier,
+                    historical=historical,
+                    depth=depth,
+                )
+                workers.append(run_in_background(
+                    self.create_and_send_nonmember_event,
+                    requester,
+                    event,
+                    prev_event_ids,
+                    auth_event_ids,
+                    ratelimit,
+                    txn_id,
+                    ignore_shadow_ban,
+                    outlier,
+                    historical,
+                    depth
+                ))
+            await defer.gatherResults(workers)
 
         # we know it was persisted, so must have a stream ordering
         assert ev.internal_metadata.stream_ordering
@@ -1386,6 +1437,8 @@ class EventCreationHandler:
                 )
 
         if event.type == EventTypes.Redaction:
+            logger.info("persist")
+            logger.info(event.redacts)
             original_event = await self.store.get_event(
                 event.redacts,
                 redact_behaviour=EventRedactBehaviour.AS_IS,
