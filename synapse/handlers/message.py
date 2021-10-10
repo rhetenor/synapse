@@ -1430,8 +1430,8 @@ class EventCreationHandler:
                     self.room_prejoin_state_types,
                 )
 
-        if (event.type == EventTypes.Redaction and event.redacts
-                in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
+        if (event.type == EventTypes.Redaction and not (event.redacts
+                in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES])):
             original_event = await self.store.get_event(
                 event.redacts,
                 redact_behaviour=EventRedactBehaviour.AS_IS,
