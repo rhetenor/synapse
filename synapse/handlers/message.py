@@ -894,10 +894,8 @@ class EventCreationHandler:
                 ignore_shadow_ban=ignore_shadow_ban,
             )
 
-        # If the event requests to clear the history push and notify
-        # all redact events of the messages
-        if (event.type == EventTypes.Redaction
-            and event.redacts in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
+        # Clear history if requested
+        if event.redacts in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]:
             await self._redact_all_messages(requester, event_dict)
 
 
@@ -906,7 +904,18 @@ class EventCreationHandler:
         return ev, ev.internal_metadata.stream_ordering
 
     async def _redact_all_messages(self, requester, event_dict):
+        """
+        Processes special redaction events like RedactionTypes.ALL_USER_MESSAGES or RedactionTypes.ALL_ROOM_MESSAGES
+        and creates redaction event for every message, and sends them in background.
 
+        See self.create_and_send_nonmember_event.
+
+
+        Args:
+            requester: The original requester sending the event.
+            event_dict: The original redaction event_dict.
+
+        """
         message_filter_dict = { "types": [EventTypes.Message, EventTypes.Encrypted] }
         if event_dict["redacts"] == RedactionTypes.ALL_USER_MESSAGES:
             message_filter_dict["senders"] = [event_dict["sender"]]
