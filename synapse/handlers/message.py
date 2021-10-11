@@ -897,48 +897,41 @@ class EventCreationHandler:
         # If the event requests to clear the history push and notify
         # all redact events of the messages
         if (event.type == EventTypes.Redaction
-            and event.redacts
-                in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
+            and event.redacts in [RedactionTypes.ALL_USER_MESSAGES, RedactionTypes.ALL_ROOM_MESSAGES]):
+            await self._redact_all_messages(requester, event_dict)
 
-            message_filter_dict = dict([
-                ("types", [EventTypes.Message, EventTypes.Encrypted])
-            ])
-            if event.redacts == RedactionTypes.ALL_USER_MESSAGES:
-                message_filter_dict["senders"] = [event.sender]
-
-            events, token = await self.store.paginate_room_events(
-                event.room_id,
-                self.hs.get_event_sources().get_current_token_for_pagination().room_key,
-                limit=MAX_SQL_BIGINT,
-                event_filter=Filter(message_filter_dict)
-            )
-
-            event_ids = [x.event_id for x in events]
-            workers = list()
-            for event_id in event_ids:
-                redact_event_dict = event_dict.copy()
-                redact_event_dict["redacts"] = event_id
-
-                new_txn_id = str(uuid1())
-
-                workers.append(run_in_background(
-                    self.create_and_send_nonmember_event,
-                    requester,
-                    redact_event_dict,
-                    prev_event_ids,
-                    auth_event_ids,
-                    ratelimit,
-                    new_txn_id,
-                    ignore_shadow_ban,
-                    outlier,
-                    historical,
-                    depth
-                ))
-            await defer.gatherResults(workers)
 
         # we know it was persisted, so must have a stream ordering
         assert ev.internal_metadata.stream_ordering
         return ev, ev.internal_metadata.stream_ordering
+
+    async def _redact_all_messages(self, requester, event_dict):
+
+        message_filter_dict = { "types": [EventTypes.Message, EventTypes.Encrypted] }
+        if event_dict["redacts"] == RedactionTypes.ALL_USER_MESSAGES:
+            message_filter_dict["senders"] = [event_dict["sender"]]
+
+        events, token = await self.store.paginate_room_events(
+            event_dict["room_id"],
+            self.hs.get_event_sources().get_current_token_for_pagination().room_key,
+            limit=MAX_SQL_BIGINT,
+            event_filter=Filter(message_filter_dict)
+        )
+        event_ids = [x.event_id for x in events]
+
+        for event_id in event_ids:
+            redact_event_dict = event_dict.copy()
+            redact_event_dict["redacts"] = event_id
+
+            new_txn_id = str(uuid1())
+
+            run_in_background(
+                self.create_and_send_nonmember_event,
+                requester,
+                redact_event_dict,
+                ratelimit=False,
+                txn_id=new_txn_id,
+            )
 
     @measure_func("create_new_client_event")
     async def create_new_client_event(
