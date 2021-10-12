@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from synapse.api.constants import MAX_SQL_BIGINT, EventTypes
+from synapse.api.filtering import Filter
 from synapse.rest import admin
 from synapse.rest.client import login, room, sync
 
 from tests.unittest import HomeserverTestCase
-
 
 class RedactionsTestCase(HomeserverTestCase):
     """Tests that various redaction events are handled correctly"""
@@ -193,3 +193,55 @@ class RedactionsTestCase(HomeserverTestCase):
             # These should all succeed, even though this would be denied by
             # the standard message ratelimiter
             self._redact_event(self.mod_access_token, self.room_id, msg_id)
+
+    async def test_redact_all_user_messages(self):
+
+        user_message_ids = []
+        # as a regular user and mod, send messages to redact
+        for _ in range(20):
+            self.helper.send(room_id=self.room_id, tok=self.mod_access_token)
+            b = self.helper.send(room_id=self.room_id, tok=self.other_access_token)
+            user_message_ids.append(b["event_id"])
+            self.reactor.advance(10)  # To get around ratelimits
+
+        self._redact_event(self.other_access_token, self.room_id, "m.messages.user")
+
+        message_filter_dict = {
+            "types": [EventTypes.Message, EventTypes.Encrypted],
+            "sender": [self.other_user_id]
+        }
+
+        # Get events from db
+        remaining_message_events = await self.hs.get_datastore().paginate_room_events(
+            self.room_id,
+            self.hs.get_event_sources().get_current_token_for_pagination().room_key,
+            limit=MAX_SQL_BIGINT,
+            event_filter=Filter(message_filter_dict)
+        )
+        remaining_message_ids = [x.event_id for x in remaining_message_events]
+
+        self.assertNotIn(user_message_ids, remaining_message_ids)
+
+    async def test_all_messages(self):
+
+        # send some messages
+        for _ in range(20):
+            self.helper.send(room_id=self.room_id, tok=self.mod_access_token)
+            self.helper.send(room_id=self.room_id, tok=self.other_access_token)
+            self.reactor.advance(10)  # To get around ratelimits
+
+        self._redact_event(self.other_access_token, self.room_id, "m.messages.user")
+
+        message_filter_dict = {
+            "types": [EventTypes.Message, EventTypes.Encrypted],
+        }
+
+        # Get events from db
+        remaining_message_events = await self.hs.get_datastore().paginate_room_events(
+            self.room_id,
+            self.hs.get_event_sources().get_current_token_for_pagination().room_key,
+            limit=MAX_SQL_BIGINT,
+            event_filter=Filter(message_filter_dict)
+        )
+
+        self.assertEqual(len(remaining_message_events), 0)
